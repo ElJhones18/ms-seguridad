@@ -1,13 +1,18 @@
-import { /* inject, */ BindingScope, injectable} from '@loopback/core';
+import { /* inject, */ BindingScope, injectable, service} from '@loopback/core';
 import {repository} from '@loopback/repository';
 import {CredencialesLogin} from '../models';
 import {UsuarioRepository} from '../repositories';
+import {JwtService} from './jwt.service';
+var generator = require('generate-password');
+var MD5 = require("crypto-js/md5")
 
 @injectable({scope: BindingScope.TRANSIENT})
 export class SeguridadUsuarioService {
   constructor(
     @repository(UsuarioRepository)
-    private usuarioRepository: UsuarioRepository
+    private usuarioRepository: UsuarioRepository,
+    @service(JwtService)
+    private serviciojwt: JwtService
   ) { }
 
   /**
@@ -16,8 +21,8 @@ export class SeguridadUsuarioService {
    * @returnscadena con el token cuando todo esta bien o cadena vacia cuando no coinciden las credenciales
    */
   async IdentificarUsuario(credenciales: CredencialesLogin): Promise<string> {
-    let response = ""
-    let esValido = await this.usuarioRepository.findOne(
+    let respuesta = ""
+    let usuario = await this.usuarioRepository.findOne(
       {
         where: {
           correo: credenciales.nombreUsuario,
@@ -26,10 +31,40 @@ export class SeguridadUsuarioService {
       }
     )
 
-    if (esValido) {
-      //creacion del token y asignación a response
+    if (usuario) {
+      let datos = {
+        nombre: `${usuario.nombre} ${usuario.apellidos}`,
+        correo: usuario.correo,
+        rol: usuario.rolId
+      }
+      try {
+        respuesta = this.serviciojwt.CrearToken(datos);
+        console.log(respuesta);
+      } catch (err) {
+        throw err
+      }
     }
 
-    return response;
+    return respuesta;
+  }
+
+  /**
+   * genera una clave aleatoria
+   * @returns
+   */
+  crearClaveAleatoria(): string {
+    var password = generator.generate({
+      length: 10,
+      numbers: true,
+      symbolsnumbers: true,
+      uppercase: true,
+    })
+    return password
+  }
+
+  cifrarCadena(cadena:string):string{
+    let cadenaCifrada = MD5(cadena).toString();
+    
+    return cadenaCifrada
   }
 }

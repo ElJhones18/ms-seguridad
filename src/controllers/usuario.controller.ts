@@ -1,3 +1,4 @@
+import {service} from '@loopback/core';
 import {
   Count,
   CountSchema,
@@ -16,15 +17,19 @@ import {
   del,
   requestBody,
   response,
+  HttpErrors,
 } from '@loopback/rest';
-import {Usuario} from '../models';
+import {CredencialesLogin, Usuario} from '../models';
 import {UsuarioRepository} from '../repositories';
+import {SeguridadUsuarioService} from '../services';
 
 export class UsuarioController {
   constructor(
     @repository(UsuarioRepository)
-    public usuarioRepository : UsuarioRepository,
-  ) {}
+    public usuarioRepository: UsuarioRepository,
+    @service(SeguridadUsuarioService)
+    private servicioSeguridad: SeguridadUsuarioService
+  ) { }
 
   @post('/usuarios')
   @response(200, {
@@ -44,6 +49,11 @@ export class UsuarioController {
     })
     usuario: Omit<Usuario, '_id'>,
   ): Promise<Usuario> {
+
+    let claveGenerada = this.servicioSeguridad.crearClaveAleatoria()
+    let claveCifrada = this.servicioSeguridad.cifrarCadena(claveGenerada)
+    usuario.clave = claveCifrada;
+    //notificar al usuario que se ha creado en el sistema
     return this.usuarioRepository.create(usuario);
   }
 
@@ -146,5 +156,31 @@ export class UsuarioController {
   })
   async deleteById(@param.path.string('id') id: string): Promise<void> {
     await this.usuarioRepository.deleteById(id);
+  }
+
+  /**
+   * Bloque de métodos personalizados para la seguridad del usuario
+   */
+  @post('/login')
+  @response(200, {
+    description: 'identificación de usuarios',
+    content: {'application/json': {schema: getModelSchemaRef(CredencialesLogin)}},
+  })
+  async identificar(
+    @requestBody({
+      content: {
+        'application/json': {
+          schema: getModelSchemaRef(CredencialesLogin,
+          ),
+        },
+      },
+    })
+    credenciales: CredencialesLogin,
+  ): Promise<string> {
+    try {
+      return this.servicioSeguridad.IdentificarUsuario(credenciales)
+    } catch (error) {
+      throw new HttpErrors[400](`se ha generado un error en la validació de las credenciales de: ${credenciales.nombreUsuario}`)
+    }
   }
 }
